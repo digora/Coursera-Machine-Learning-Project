@@ -1,0 +1,100 @@
+---
+title: "CourseraPMLProject"
+author: "Migo Andres"
+date: "August 13, 2019"
+output: html_document
+---
+# Practical Machine Learning Coursera Project
+
+## Quantified Self Movement
+
+The dataset was provided by enthusiasts who record their movement and actions through revolutionary gadgets that can measure their actions.Their progress and activity can be viewed [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har)
+
+# Environment Setup
+
+First lets load all the relevant libraries and setup the environment.
+
+```{r env_setup}
+library(caret) 
+library(rattle)
+library(randomForest)
+
+# Load data
+training <- read.csv("pml-training.csv", na.strings = c("NA", ""))
+testing <- read.csv("pml-testing.csv", na.strings = c("NA", ""))
+```
+
+The training set has 19622 obs. of  160 variables while the testing set has 20 obs. of  160 variables.
+
+# Data Cleaning
+
+We remove the first 7 columns since X and user_name will not have much prediction power since they seem to be ID or primary keys while the others are only metadata. We will also be removing columns with any NA values. This will also speed up the run time of our model due to having less features.
+
+```{r data_cleaning}
+training <- training[, colSums(is.na(training)) == 0]
+validation <- testing[, colSums(is.na(testing)) == 0]
+
+trainSet <- training[, -c(1:7)]
+testSet <- training[, -c(1:7)]
+```
+
+# Data Partitioning
+
+We will separate the training and testing set from the original train set (not the validation set) using the createDataPartition function of caret
+
+```{r}
+inTrain <- createDataPartition(trainSet$classe, p=.70, list=FALSE)
+
+trainingSet <- trainSet[inTrain, ]
+testingSet <- trainSet[-inTrain, ]
+```
+
+The training set has 13737 obs. of  153 variables while the testing set has 5885 obs. of  153 variables.
+
+# Prediction
+
+Since the 'classe' variable isn't a continuous value the prediction would be acting as a classification problem thus we will be using random forests.
+
+## Random Forests
+
+We will be using additional 5-fold cross validation
+
+```{r allow_parallel}
+library(parallel)
+library(doParallel)
+
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+# To speed up the runtime of the model
+fitControl <- trainControl(method = "cv",
+number = 5,
+allowParallel = TRUE)
+```
+
+```{r rf_model}
+# Construct the Random Forest Model
+rfModel <- train(classe ~ ., data = trainingSet, method = "rf", trControl = fitControl)
+
+print(rfModel, digits = 4)
+
+# Evaluate the model using the test set
+rfPreds <- predict(rfModel, testSet)
+(confRf <- confusionMatrix(testSet$classe, rfPreds))
+(accRf <- confRf$overall[1])
+```
+
+Our model has achieved a satisfactory accuracy of above 90%
+
+Now lets predict from the validation set
+
+```{r rf_predictions}
+(predict(rfModel, validation))
+```
+
+These are the predictions of the model
+
+
+```{r}
+stopCluster(cluster)
+```
